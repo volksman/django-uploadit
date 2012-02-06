@@ -18,36 +18,24 @@ $(function () {
     // Initialize the jQuery File Upload widget:
     $('#fileupload').fileupload();
 
-    if (window.location.hostname === 'blueimp.github.com') {
-        // Demo settings:
-        $('#fileupload').prop(
-            'action',
-            '//jquery-file-upload.appspot.com'
-        );
-        $('#fileupload').fileupload('option', {
-            maxFileSize: 5000000,
-            acceptFileTypes: /(\.|\/)(gif|jpe?g|png)$/i
-        });
-    } else {
-        // Load existing files:
-        $.getJSON($('#fileupload').prop('action'), function (files) {
-            var fu = $('#fileupload').data('fileupload'),
-                template;
-            fu._adjustMaxNumberOfFiles(-files.length);
-            template = fu._renderDownload(files)
-                .appendTo($('#fileupload .files'));
-            // Force reflow:
-            fu._reflow = fu._transition && template.length &&
-                template[0].offsetWidth;
-            template.addClass('in');
-        });
-    }
+	   // Load existing files:
+	$.getJSON($('#fileupload').prop('action'), function (files) {
+		var fu = $('#fileupload').data('fileupload'),
+			template;
+		fu._adjustMaxNumberOfFiles(-files.length);
+		template = fu._renderDownload(files)
+			.appendTo($('#fileupload .files'));
+		// Force reflow:
+		fu._reflow = fu._transition && template.length &&
+			template[0].offsetWidth;
+		template.addClass('in');
+	});
 
     // Enable iframe cross-domain access via redirect page:
-    var redirectPage = window.location.href.replace(
-        /\/[^\/]*$/,
-        '/cors/result.html?%s'
-    );
+    //var redirectPage = window.location.href.replace(
+        ///\/[^\/]*$/,
+        //'/cors/result.html?%s'
+    //);
     $('#fileupload').bind('fileuploadsend', function (e, data) {
         if (data.dataType.substr(0, 6) === 'iframe') {
             var target = $('<a/>').prop('href', data.url)[0];
@@ -72,8 +60,5 @@ $(function () {
                 .appendTo(document.body);
         }
     );
-
-    // Initialize the Bootstrap Image Gallery plugin:
-    $('#fileupload .files').imagegallery();
 
 });

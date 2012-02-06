@@ -1,19 +1,38 @@
 from django.http import HttpResponse, HttpResponseBadRequest
+from django.shortcuts import get_object_or_404
 from django.core.files.uploadedfile import UploadedFile
 from django.db.models.loading import get_model
 from django.utils import simplejson
 from django.views.decorators.csrf import csrf_exempt
+from django.db.models import FileField, ImageField
+
+from uploadit.forms import FileForm
+from uploadit.signals import upload_done
+
+try:
+    from attachments.models import Attachment
+except:
+    Attachment = False
 
 import logging
 log = logging
 
+def create_string_wrapper(my_string):
+    strings = {}
+    return strings.setdefault(my_string, object())
+
 @csrf_exempt
-def multiuploader(request, model_string):
+def upload(request, app_model, field, id, form=FileForm):
     """
     Main Multiuploader module.
     Parses data from jQuery plugin and makes database changes.
     """
     if request.method == 'POST':
+        if "application/json" in request.META['HTTP_ACCEPT_ENCODING']:
+            mimetype = 'application/json'
+        else:
+            mimetype = 'text/plain'
+
         log.info('received POST to main multiuploader view')
         if request.FILES == None:
             return HttpResponseBadRequest('Must have files attached!')
@@ -26,41 +45,51 @@ def multiuploader(request, model_string):
         log.info ('Got file: "%s"' % str(filename))
         log.info('Content type: "$s" % file.content_type')
 
+        instance = form({ 'filename': filename, 'id': id })
+        if not instance.is_valid():
+            return HttpResponse(simplejson.dumps([{
+                                        'error': instance.errors['__all__'],
+                                        'name': filename,
+                                        'size': file_size,
+                                        }]), mimetype=mimetype)
+
         #writing file manually into model
         #because we don't need form of any type.
-        model = get_model(*model_string.split('.'))
-        image = model()
-        image.image=file
-        image.save()
+        model = get_model(*app_model.split('.'))
+        field_info = model._meta.get_field_by_name(field)
+        obj = get_object_or_404(model, pk=id)
+        if not isinstance(field_info[0], FileField) or not isinstance(field_info[0], ImageField):
+            if Attachment:
+                """ if the field we are uploading to is not a FileField or
+                ImageField it is a generic attachment """
+                att = Attachment()
+                att.file.save(filename, file, save=False)
+                att.added_by = request.user
+                att.save()
+                setattr(obj, field, att)
+            else:
+                raise "Cannot attach file"
+        else:
+            setattr(obj, field, file)
+
+        obj.save()
         log.info('File saving done')
 
-        #getting thumbnail url using sorl-thumbnail
-        #if 'image' in file.content_type.lower():
-            #im = get_thumbnail(image, "80x80", quality=50)
-            #thumb_url = im.url
-        #else:
-
-        #settings imports
-        #try:
-            #file_delete_url = settings.MULTI_FILE_DELETE_URL+'/'
-            #file_url = settings.MULTI_IMAGE_URL+'/'+image.key_data+'/'
-        #except AttributeError:
-            #file_delete_url = 'multi_delete/'
-            #file_url = 'multi_image/'+image.key_data+'/'
+        upload_done.send(sender=create_string_wrapper('uploadit'),
+                        app=app_model.split('.')[0],
+                        model=app_model.split('.')[1],
+                        field=field, instance=obj,
+                        filename=filename)
 
         #generating json response array
         result = []
         result.append({"name":filename,
                        "size":file_size,
                        "delete_type":"POST",})
+
         response_data = simplejson.dumps(result)
 
-        #checking for json data type
-        #big thanks to Guy Shapiro
-        if "application/json" in request.META['HTTP_ACCEPT_ENCODING']:
-            mimetype = 'application/json'
-        else:
-            mimetype = 'text/plain'
         return HttpResponse(response_data, mimetype=mimetype)
+
     else: #GET
         return HttpResponseBadRequest()

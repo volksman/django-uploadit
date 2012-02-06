@@ -1,4 +1,5 @@
 /*
+ * you fucking die
  * jQuery File Upload Plugin 5.6
  * https://github.com/blueimp/jQuery-File-Upload
  *

@@ -1,10 +1,10 @@
 """
 jQuery templates use constructs like:
 
-    {{if condition}} print something{{/if}}
+    {% if condition %} print {%=something%}{% if %}
 
 This, of course, completely screws up Django templates,
-because Django thinks {{ and }} mean something.
+because Django thinks {% and %} mean something.
 
 Wrap {% verbatim %} and {% endverbatim %} around those
 blocks of jQuery templates and this will try its best
@@ -12,6 +12,8 @@ to output the contents with no changes.
 """
 
 from django import template
+
+import re
 
 register = template.Library()
 
@@ -30,15 +32,20 @@ def verbatim(parser, token):
     text = []
     while 1:
         token = parser.tokens.pop(0)
+        is_var = False
         if token.contents == 'endverbatim':
             break
-        if token.token_type == template.TOKEN_VAR:
-            text.append('{{')
-        elif token.token_type == template.TOKEN_BLOCK:
+
+        if re.match(r'=', token.contents) and token.token_type == template.TOKEN_BLOCK:
             text.append('{%')
-        text.append(token.contents)
-        if token.token_type == template.TOKEN_VAR:
-            text.append('}}')
+            is_var = True
         elif token.token_type == template.TOKEN_BLOCK:
+            text.append('{% ')
+
+        text.append(token.contents)
+
+        if is_var and token.token_type == template.TOKEN_BLOCK:
             text.append('%}')
+        elif token.token_type == template.TOKEN_BLOCK:
+            text.append(' %}')
     return VerbatimNode(''.join(text))
