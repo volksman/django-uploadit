@@ -55,7 +55,8 @@ def upload(request, app_model, field, id, form=FileForm):
 
         #writing file manually into model
         #because we don't need form of any type.
-        model = get_model(*app_model.split('.'))
+        in_app, in_model = app_model.split('.')
+        model = get_model(in_app, in_model)
         field_info = model._meta.get_field_by_name(field)
         obj = get_object_or_404(model, pk=id)
         if not isinstance(field_info[0], FileField) or not isinstance(field_info[0], ImageField):
@@ -66,7 +67,8 @@ def upload(request, app_model, field, id, form=FileForm):
                 att.file.save(filename, file, save=False)
                 att.added_by = request.user
                 att.save()
-                setattr(obj, field, att)
+                if in_app != 'attachments':
+                    setattr(obj, field, att)
             else:
                 raise "Cannot attach file"
         else:
