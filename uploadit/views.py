@@ -22,11 +22,12 @@ def create_string_wrapper(my_string):
     return strings.setdefault(my_string, object())
 
 @csrf_exempt
-def upload(request, app_model, field, id, form=FileForm):
+def upload(request, app_model, id, field=None, form=FileForm, filename_prefix=None):
     """
     Main Multiuploader module.
     Parses data from jQuery plugin and makes database changes.
     """
+    att = False
     if request.method == 'POST':
         if "application/json" in request.META['HTTP_ACCEPT_ENCODING']:
             mimetype = 'application/json'
@@ -45,6 +46,7 @@ def upload(request, app_model, field, id, form=FileForm):
         log.info ('Got file: "%s"' % str(filename))
         log.info('Content type: "$s" % file.content_type')
 
+        """ Use a form to validate the upload """
         instance = form({ 'filename': filename, 'id': id })
         if not instance.is_valid():
             return HttpResponse(simplejson.dumps([{
@@ -53,25 +55,39 @@ def upload(request, app_model, field, id, form=FileForm):
                                         'size': file_size,
                                         }]), mimetype=mimetype)
 
-        #writing file manually into model
-        #because we don't need form of any type.
         in_app, in_model = app_model.split('.')
         model = get_model(in_app, in_model)
-        field_info = model._meta.get_field_by_name(field)
+
+        if field:
+            field_info = model._meta.get_field_by_name(field)
+        else:
+            field_info = [False]
+
         obj = get_object_or_404(model, pk=id)
         if not isinstance(field_info[0], FileField) or not isinstance(field_info[0], ImageField):
-            if Attachment:
-                """ if the field we are uploading to is not a FileField or
+            """ if the field we are uploading to is not a FileField or
                 ImageField it is a generic attachment """
+            if Attachment:
+                """ attach the file """
                 att = Attachment()
+                att.content_object = obj
+                att.client = obj.client
                 att.file.save(filename, file, save=False)
                 att.added_by = request.user
                 att.save()
-                if in_app != 'attachments':
+                if field:
+                    """ if we pass in an optional field name then the sending
+                    object tracks the attachement too.  So we set the attachment
+                    ID in the foreign object """
                     setattr(obj, field, att)
             else:
                 raise "Cannot attach file"
         else:
+            """ this does not use the Attachment model and instead tracks the
+            upload independantly.  Just upload the file and save it to the
+            foreign model """
+            if not field:
+                raise "Field is mandatory when not a generic attachement"
             setattr(obj, field, file)
 
         obj.save()
@@ -81,7 +97,7 @@ def upload(request, app_model, field, id, form=FileForm):
                         app=app_model.split('.')[0],
                         model=app_model.split('.')[1],
                         field=field, instance=obj,
-                        filename=filename)
+                        filename=filename, attachment_object=att)
 
         #generating json response array
         result = []
